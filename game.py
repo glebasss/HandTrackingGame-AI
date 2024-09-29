@@ -3,7 +3,7 @@ import mediapipe as mp
 import torch
 import time
 import numpy as np
-from utils import Text
+from utils import Text, Rectangle
 
 
 class HandDetector():
@@ -132,6 +132,11 @@ class SoccerGame:
         self.text_end = Text(cv2.FONT_HERSHEY_SIMPLEX,
                              3, 5, color=(0, 255, 255))
         self.fingerdot = FingerDot(8)
+        self.selected_mod = 0
+        self.rectange = Rectangle()
+        self.easy_count = [0, 'easy', 0]
+        self.medium_count = [0, 'medium', 0]
+        self.hard_count = [0, 'hard', 0]
 
     def ball_spawn(self, img):
         self.h, self.w, _ = img.shape
@@ -144,8 +149,8 @@ class SoccerGame:
         self.ball_spawned = True
 
     def falling_ball(self):
-        self.ky = (1+(pow(self.score, (14/10))/10))
-        self.yball += 2 * int(self.ky)
+        self.ky = (1+(pow(self.score, (14/10))/10)) * self.coef_falling
+        self.yball += 2 * int(self.ky) * self.coef_falling
 
     def is_ball_touch(self, xball, yball, radius, point, detection='lazer'):
         if detection == 'lazer':
@@ -175,33 +180,139 @@ class SoccerGame:
                     self.ball_spawn(img)
                     self.score += 1
 
+    def rectangle_collision(self, dot, rectangle, mode):
+        '''
+        dot : [x,y]
+        rectangle:[x1,y1,x2,y2]
+        '''
+        count, game_mode, finish = mode
+        if count >= 10:
+            self.game_mode = game_mode
+            return [count, game_mode, 1]
+        if not dot:
+            count = 0
+            return [count, game_mode, 0]
+        x_dot, y_dot = dot
+        x1, y1, x2, y2 = rectangle
+        if (x_dot in range(min(x1, x2), max(x1, x2))) and \
+                (y_dot in range(min(y1, y2), max(y1, y2))):
+            return [count+1, game_mode, 0]
+        count = 0
+        return [count, game_mode, 0]
+
     def start_game(self, img):
         match self.start_num:
             case 0:
-                self.text_start.put_in_center("Ready?", img)
+                self.text_start.put_in_center(["Ready?"], img)
             case 1:
-                self.text_start.put_in_center('3', img)
+                self.text_start.put_in_center(['3'], img)
             case 2:
-                self.text_start.put_in_center('2', img)
+                self.text_start.put_in_center(['2'], img)
             case 3:
-                self.text_start.put_in_center('1', img)
+                self.text_start.put_in_center(['1'], img)
         return img
 
     def end_game(self, img):
         end_text = f'LOSER!!!'
-        self.text_end.put_in_center(end_text, img)
+        self.text_end.put_in_center([end_text], img)
 
     def show_score(self, img):
         scoretext = f'Score : {self.score}'
         cv2.putText(img, scoretext, (20, 30),
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 1)
 
-    def play_game_ball(self, cap, detection):
-        '''
-        detection = [lazer,fingerdot]
-        '''
+    def select_game_mod(self, cap):
+        while True:
+            ret, img = cap.read()
+            img = cv2.flip(img, 1).copy()
+            if not ret:
+                print('no ret')
+            self.text_select_mod = Text(
+                cv2.FONT_HERSHEY_SIMPLEX, 1, 3, (0, 0, 0))
+            _, text_pos = \
+                self.text_select_mod.put_in_center(
+                    ['Select game mod', 'easy', 'medium', 'hard'], img)
+            _, self.easy, self.medium, self.hard = text_pos
+            # print(self.easy, self.medium, self.hard)
+            dot_points = self.fingerdot.dot_points(img)
+            self.rectangle_e = self.rectange.create_rectangle(self.easy, img)
+            self.rectangle_e = self.rectange.create_rectangle(self.medium, img)
+            self.rectangle_e = self.rectange.create_rectangle(self.hard, img)
+            self.text_select_mod.put_in_center(
+                ['Select game mod', 'easy', 'medium', 'hard'], img)
+            if dot_points:
+                cv2.circle(
+                    img, (dot_points[0], dot_points[1]), 15, (0, 255, 50), -1)
+            self.easy_count = self.rectangle_collision(
+                dot_points, self.easy, self.easy_count)
+            self.medium_count = self.rectangle_collision(
+                dot_points, self.medium, self.medium_count)
+            self.hard_count = self.rectangle_collision(
+                dot_points, self.hard, self.hard_count)
+            if self.easy_count[2] == 1:
+                print(self.game_mode)
+                self.coef_falling = 1
+                break
+            if self.medium_count[2] == 1:
+                print(self.game_mode)
+                self.coef_falling = 2
+                break
+            if self.hard_count[2] == 1:
+                print(self.game_mode)
+                self.coef_falling = 3
+                break
+
+            cv2.imshow('video', img)
+            if cv2.waitKey(10) & 0xFF == ord('q') or (self.end == 2):
+                cap.release()
+                cv2.destroyAllWindows()
+                break
+
+    def select_detection(self, cap):
+        self.game_mode_lazer_count = [0, 'lazer', 0]
+        self.game_mode_fingerdot_count = [0, 'fingerdot', 0]
+        while True:
+            ret, img = cap.read()
+            img = cv2.flip(img, 1).copy()
+            if not ret:
+                print('no ret')
+            self.text_select_detection = Text(
+                cv2.FONT_HERSHEY_SIMPLEX, 1, 3, (0, 0, 0))
+            _, text_pos = \
+                self.text_select_mod.put_in_center(
+                    ['Select detection', 'lazer', 'fingerdot'], img)
+            _, self.game_mode_lazer, self.game_mode_fingerdot = text_pos
+            dot_points = self.fingerdot.dot_points(img)
+            self.rectangle_e = \
+                self.rectange.create_rectangle(self.game_mode_lazer, img)
+            self.rectangle_e = \
+                self.rectange.create_rectangle(self.game_mode_fingerdot, img)
+            self.text_select_detection.put_in_center(
+                ['Select detection', 'lazer', 'fingerdot'], img)
+            if dot_points:
+                cv2.circle(
+                    img, (dot_points[0], dot_points[1]), 15, (0, 255, 50), -1)
+            self.game_mode_lazer_count = self.rectangle_collision(
+                dot_points, self.game_mode_lazer, self.game_mode_lazer_count)
+            self.game_mode_fingerdot_count = self.rectangle_collision(
+                dot_points, self.game_mode_fingerdot, self.game_mode_fingerdot_count)
+            if self.game_mode_lazer_count[2] == 1:
+                self.detection = 'lazer'
+                break
+            if self.game_mode_fingerdot_count[2] == 1:
+                self.detection = 'fingerdot'
+                break
+            cv2.imshow('video', img)
+            if cv2.waitKey(10) & 0xFF == ord('q') or (self.end == 2):
+                cap.release()
+                cv2.destroyAllWindows()
+                break
+
+    def play_game_ball(self, cap):
         self.display_time = 1
         self.start_time = 0
+        self.select_game_mod(cap)
+        self.select_detection(cap)
         while True:
             ret, img = cap.read()
             if not ret:
@@ -224,12 +335,12 @@ class SoccerGame:
                     if time.time() - end_time >= 3:
                         self.end = 2
                 else:
-                    if detection == 'lazer':
+                    if self.detection == 'lazer':
                         self.lazers.draw_lazers(img)
-                    if detection == 'fingerdot':
+                    if self.detection == 'fingerdot':
                         self.fingerdot.dot_show(img)
                     self.falling_ball()
-                    self.collision(img, detection=detection)
+                    self.collision(img, detection=self.detection)
                     self.show_score(img)
                     cv2.circle(img, (self.xball, int(self.yball)),
                                20, (255, 0, 255), -1)

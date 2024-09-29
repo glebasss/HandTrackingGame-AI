@@ -5,4 +5,4 @@ from game import *
 
 game = SoccerGame()
 cap = cv2.VideoCapture(1)
-game.play_game_ball(cap, detection='lazer')
+game.play_game_ball(cap)
