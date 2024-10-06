@@ -56,14 +56,6 @@ Make sure you have the following installed:
 ## 📷 **Video**
 https://www.youtube.com/watch?v=XmuxSWUTBPY&ab_channel=gaarraqq
 
-## 🙋‍♂️ **Future Improvements**
-- Add more interactive game elements such as **obstacles** or **power-ups**.
-- Incorporate more game modes to increase complexity.
-
-## 💌 **Contributing**
-Feel free to submit **issues** and **pull requests**. I’m happy to collaborate with others interested in AI, computer vision, and game development.
-
-
 ## 📧 **Contact**
 If you have any questions or suggestions, feel free to reach out:
 - **Email**: ona2420@gmail.com
