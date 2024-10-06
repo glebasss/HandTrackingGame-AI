@@ -44,9 +44,7 @@ Make sure you have the following installed:
    pip install -r requirements.txt
    ```
 4. **Run the Game**:
-   ```bash
-   python play_game.py
-   ```
+   Open the app.py file and set the appropriate camera index in cv2.VideoCapture(). For example, in my case, it is cv2.VideoCapture(2) to use camera 2.
 
 ## 🎯 **How to Play**
 - Use your **hand gestures** to interact with falling balls.
