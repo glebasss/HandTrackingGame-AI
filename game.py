@@ -7,7 +7,7 @@ from utils import Text, Rectangle
 
 
 class HandDetector():
-    def __init__(self, mode=False, maxHands=2, detectionCon=0.5, trackCon=0.5):
+    def __init__(self, mode=False, maxHands=2, detectionCon=0.5, trackCon=0.8):
         self.mode = mode
         self.maxHands = maxHands
         self.detectionCon = detectionCon
@@ -69,6 +69,7 @@ class Lazers(HandDetector):
 
     def lazer_points(self, img):
         img_ = img.copy()
+        hands = []
         imgRGB = cv2.cvtColor(img_, cv2.COLOR_BGR2RGB)
         results = self.hands.process(imgRGB)
         if results.multi_hand_landmarks:
@@ -77,7 +78,8 @@ class Lazers(HandDetector):
                 if len(hand) > 15:
                     x1, y1 = hand[self.p1]['x'], hand[self.p1]['y']
                     x2, y2 = hand[self.p2]['x'], hand[self.p2]['y']
-                    return x1, y1, x2, y2
+                    hands.append([x1, y1, x2, y2])
+            return hands
         return None
 
     def get_points_between(self, x1, y1, x2, y2):
@@ -105,6 +107,7 @@ class FingerDot(HandDetector):
         self.point = point
 
     def dot_points(self, img):
+        hands = []
         imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         results = self.hands.process(imgRGB)
         if results.multi_hand_landmarks:
@@ -112,13 +115,16 @@ class FingerDot(HandDetector):
             for hand in listt:
                 if len(hand) > 15:
                     x1, y1 = hand[self.point]['x'], hand[self.point]['y']
-                    return x1, y1
+                    hands.append([x1, y1])
+            return hands
+        return 0
 
     def dot_show(self, img):
         listt = self.dot_points(img)
-        if listt != None:
-            x1, y1 = listt
-            cv2.circle(img, (x1, y1), 15, (0, 255, 0), -1)
+        if listt != 0:
+            for hand in listt:
+                x1, y1 = hand
+                cv2.circle(img, (x1, y1), 15, (0, 255, 0), -1)
 
 
 class SoccerGame:
@@ -130,7 +136,7 @@ class SoccerGame:
         self.end = 0
         self.text_start = Text(cv2.FONT_HERSHEY_SIMPLEX, 3, 5)
         self.text_end = Text(cv2.FONT_HERSHEY_SIMPLEX,
-                             3, 5, color=(0, 255, 255))
+                             1, 3, color=(0, 255, 255))
         self.fingerdot = FingerDot(8)
         self.selected_mod = 0
         self.rectange = Rectangle()
@@ -164,19 +170,24 @@ class SoccerGame:
 
     def collision(self, img, detection):
         if detection == 'lazer':
-            points = self.lazers.lazer_points(img)
-            if points != None:
+            hand_points = self.lazers.lazer_points(img)
+            if hand_points == None:
+                return 0
+            for points in hand_points:
                 x1, y1, x2, y2 = points
-                list_of_points = self.lazers.get_points_between(x1, y1, x2, y2)
+                list_of_points = \
+                    self.lazers.get_points_between(x1, y1, x2, y2)
                 for point in list_of_points:
                     if self.is_ball_touch(self.xball, self.yball, 20, point):
                         self.ball_spawn(img)
                         self.score += 1
         if detection == 'fingerdot':
-            points = self.fingerdot.dot_points(img)
-            if points != None:
-                self.x1dot, self.y1dot = points
-                if self.is_ball_touch(self.xball, self.yball, 20, points, 'fingerdot'):
+            hand_points = self.fingerdot.dot_points(img)
+            if hand_points == 0:
+                return 0
+            for point in hand_points:
+                self.x1dot, self.y1dot = point
+                if self.is_ball_touch(self.xball, self.yball, 20, point, 'fingerdot'):
                     self.ball_spawn(img)
                     self.score += 1
 
@@ -213,8 +224,9 @@ class SoccerGame:
         return img
 
     def end_game(self, img):
-        end_text = f'LOSER!!!'
-        self.text_end.put_in_center([end_text], img)
+        end_text = f'Nice try!'
+        total_score = f'Your total score: {self.score} '
+        self.text_end.put_in_center([end_text, total_score], img)
 
     def show_score(self, img):
         scoretext = f'Score : {self.score}'
@@ -227,6 +239,7 @@ class SoccerGame:
             img = cv2.flip(img, 1).copy()
             if not ret:
                 print('no ret')
+            dot_points = self.fingerdot.dot_points(img)
             self.text_select_mod = Text(
                 cv2.FONT_HERSHEY_SIMPLEX, 1, 3, (0, 0, 0))
             _, text_pos = \
@@ -234,21 +247,21 @@ class SoccerGame:
                     ['Select game mod', 'easy', 'medium', 'hard'], img)
             _, self.easy, self.medium, self.hard = text_pos
             # print(self.easy, self.medium, self.hard)
-            dot_points = self.fingerdot.dot_points(img)
             self.rectangle_e = self.rectange.create_rectangle(self.easy, img)
             self.rectangle_e = self.rectange.create_rectangle(self.medium, img)
             self.rectangle_e = self.rectange.create_rectangle(self.hard, img)
             self.text_select_mod.put_in_center(
                 ['Select game mod', 'easy', 'medium', 'hard'], img)
             if dot_points:
+                dot_point = dot_points[0]
                 cv2.circle(
-                    img, (dot_points[0], dot_points[1]), 15, (0, 255, 50), -1)
-            self.easy_count = self.rectangle_collision(
-                dot_points, self.easy, self.easy_count)
-            self.medium_count = self.rectangle_collision(
-                dot_points, self.medium, self.medium_count)
-            self.hard_count = self.rectangle_collision(
-                dot_points, self.hard, self.hard_count)
+                    img, (dot_point[0], dot_point[1]), 15, (0, 255, 50), -1)
+                self.easy_count = self.rectangle_collision(
+                    dot_point, self.easy, self.easy_count)
+                self.medium_count = self.rectangle_collision(
+                    dot_point, self.medium, self.medium_count)
+                self.hard_count = self.rectangle_collision(
+                    dot_point, self.hard, self.hard_count)
             if self.easy_count[2] == 1:
                 print(self.game_mode)
                 self.coef_falling = 1
@@ -276,13 +289,13 @@ class SoccerGame:
             img = cv2.flip(img, 1).copy()
             if not ret:
                 print('no ret')
+            dot_points = self.fingerdot.dot_points(img)
             self.text_select_detection = Text(
                 cv2.FONT_HERSHEY_SIMPLEX, 1, 3, (0, 0, 0))
             _, text_pos = \
                 self.text_select_mod.put_in_center(
                     ['Select detection', 'lazer', 'fingerdot'], img)
             _, self.game_mode_lazer, self.game_mode_fingerdot = text_pos
-            dot_points = self.fingerdot.dot_points(img)
             self.rectangle_e = \
                 self.rectange.create_rectangle(self.game_mode_lazer, img)
             self.rectangle_e = \
@@ -290,12 +303,13 @@ class SoccerGame:
             self.text_select_detection.put_in_center(
                 ['Select detection', 'lazer', 'fingerdot'], img)
             if dot_points:
+                dot_point = dot_points[0]
                 cv2.circle(
-                    img, (dot_points[0], dot_points[1]), 15, (0, 255, 50), -1)
-            self.game_mode_lazer_count = self.rectangle_collision(
-                dot_points, self.game_mode_lazer, self.game_mode_lazer_count)
-            self.game_mode_fingerdot_count = self.rectangle_collision(
-                dot_points, self.game_mode_fingerdot, self.game_mode_fingerdot_count)
+                    img, (dot_point[0], dot_point[1]), 15, (0, 255, 50), -1)
+                self.game_mode_lazer_count = self.rectangle_collision(
+                    dot_point, self.game_mode_lazer, self.game_mode_lazer_count)
+                self.game_mode_fingerdot_count = self.rectangle_collision(
+                    dot_point, self.game_mode_fingerdot, self.game_mode_fingerdot_count)
             if self.game_mode_lazer_count[2] == 1:
                 self.detection = 'lazer'
                 break

@@ -4,5 +4,5 @@ import time
 from game import *
 
 game = SoccerGame()
-cap = cv2.VideoCapture(1)
+cap = cv2.VideoCapture(2)
 game.play_game_ball(cap)
